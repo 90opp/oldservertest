@@ -1,7 +1,12 @@
--- CONFIG
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- твой placeId
 local placeId = 126884695634066
 
-local serverIds = {
+-- список jobId
+local jobids = {
 	"4d584a32-ff7e-4bca-b8e0-2bc9687b1c6a", "2c73109b-6cbf-4e82-b0c0-3f1188d3a775",
 	"16a5bce7-dacb-4b7d-9b7d-702216af9294", "91f43c4e-b0b1-4b72-8c0c-b975d55cd6d6",
 	"97727050-d015-4904-875c-24b4fb211c8a", "5d8b115d-67b7-4035-98e0-0a297b2a099c",
@@ -43,55 +48,50 @@ local serverIds = {
 	"ea807338-9cf3-4cd6-a8c5-d2c53587a282"
 }
 
-local TeleportService = game:GetService("TeleportService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- 🛠 создаём RemoteEvent, если его нет
-local remote = ReplicatedStorage:FindFirstChild("TeleportEvent")
-if not remote then
-    remote = Instance.new("RemoteEvent")
-    remote.Name = "TeleportEvent"
-    remote.Parent = ReplicatedStorage
+-- перемешивание списка
+local function shuffle(tbl)
+	for i = #tbl, 2, -1 do
+		local j = math.random(i)
+		tbl[i], tbl[j] = tbl[j], tbl[i]
+	end
+	return tbl
 end
 
--- 📦 создаём серверную функцию
-remote.OnServerEvent:Connect(function(player)
-    local tried = {}
+-- флаг, чтобы не спамить
+local teleporting = false
 
-    local function tryNext()
-        if #tried >= #serverIds then
-            warn("[Teleport] Все сервера использованы.")
-            return
-        end
-
-        local index
-        repeat
-            index = math.random(1, #serverIds)
-        until not tried[index]
-
-        tried[index] = true
-        local jobId = serverIds[index]
-
-        print("[Teleport] Пробуем: " .. jobId)
-
-        local success, result = pcall(function()
-            TeleportService:TeleportToPrivateServer(placeId, jobId, {player})
-        end)
-
-        if not success then
-            result = tostring(result):lower()
-            if result:find("full") or result:find("request failed") or result:find("cluster") or result:find("shutdown") then
-                warn("[Teleport] Неудача: " .. result)
-                task.delay(10, tryNext)
-            else
-                warn("[Teleport] Ошибка: " .. result)
-                task.delay(10, tryNext)
-            end
-        end
-    end
-
-    tryNext()
+-- обработка ошибки
+TeleportService.TeleportInitFailed:Connect(function(player, result)
+    warn("Teleport failed: " .. tostring(result))
+    teleporting = false
 end)
 
--- 🚀 триггер с клиента (один раз)
-remote:FireServer()
+-- цикл телепорта
+task.spawn(function()
+    while true do
+        if not teleporting then
+            teleporting = true
+
+            local shuffledList = shuffle(jobIds)
+            for _, jobId in ipairs(shuffledList) do
+                print("Пробуем сервер: " .. jobId)
+                local success, err = pcall(function()
+                    TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+                end)
+
+                if not success then
+                    warn("Ошибка телепорта: " .. tostring(err))
+                    task.wait(10)
+                else
+                    print("Телепорт инициализирован, ждём переход...")
+                    break
+                end
+            end
+
+            -- подождем, если ничего не сработало
+            task.wait(10)
+            teleporting = false
+        end
+        task.wait(5)
+    end
+end)
