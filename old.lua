@@ -1,60 +1,72 @@
+local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
 local placeId = 126884695634066
-local url = "https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt"
+local serversUrl = "https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt"
 
--- Функция для загрузки списка jobId из URL
-local function loadJobIds()
-    local success, response = pcall(function()
-        return game:HttpGet(url)
+local serverJobIds = {}
+local currentIndex = 1
+
+local function fetchServers()
+    local success, result = pcall(function()
+        return game:HttpGet(serversUrl)
     end)
-    if not success then
-        warn("Не удалось загрузить jobId: ".. tostring(response))
-        return {}
-    end
-
-    local jobIds = {}
-    -- предполагаем, что в response просто список jobId, по одному на строку или с переносами
-    for line in response:gmatch("[^\r\n]+") do
-        line = line:match("^%s*(.-)%s*$") -- убираем пробелы по краям
-        if line ~= "" then
-            table.insert(jobIds, line)
+    if success then
+        -- Разбиваем результат по строкам и фильтруем пустые строки
+        for line in result:gmatch("[^\r\n]+") do
+            local trimmed = line:match("^%s*(.-)%s*$")
+            if trimmed ~= "" then
+                table.insert(serverJobIds, trimmed)
+            end
         end
+        print("Загружено серверов: "..#serverJobIds)
+    else
+        warn("Не удалось загрузить список серверов:", result)
     end
-    return jobIds
 end
 
-local jobIds = loadJobIds()
-if #jobIds == 0 then
-    warn("Список серверов пуст, выходим")
-    return
-end
+local function tryTeleport()
+    if #serverJobIds == 0 then
+        warn("Список серверов пуст, повторная загрузка через 10 сек")
+        wait(10)
+        fetchServers()
+        return
+    end
 
-local function tryTeleport(jobId)
+    if currentIndex > #serverJobIds then
+        currentIndex = 1
+    end
+
+    local jobId = serverJobIds[currentIndex]
+    print("Пытаемся телепортироваться на сервер:", jobId)
+
     local success, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
     end)
-    if success then
-        print("Телепорт к серверу:", jobId)
-        return true
+
+    if not success then
+        print("Ошибка телепорта:", err)
+        if tostring(err):find("GameFull") then
+            currentIndex = currentIndex + 1
+            wait(10)
+            tryTeleport()
+        else
+            warn("Не удалось телепортироваться: ", err)
+            -- Можно попробовать следующий сервер через 5 сек
+            currentIndex = currentIndex + 1
+            wait(5)
+            tryTeleport()
+        end
     else
-        warn("Ошибка телепорта:", err)
-        return false
+        print("Телепорт отправлен, ожидаем переключения")
     end
 end
 
--- Основной цикл перебора серверов с ожиданием при неудаче
+fetchServers()
+
 while true do
-    for _, jobId in ipairs(jobIds) do
-        local teleported = tryTeleport(jobId)
-        if teleported then
-            -- Телепорт начался — ждем выход из скрипта
-            return
-        else
-            print("Сервер " .. jobId .. " недоступен или полный. Ждем 10 сек и пробуем следующий...")
-            wait(10)
-        end
-    end
+    tryTeleport()
+    wait(5)
 end
