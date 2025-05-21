@@ -27,6 +27,7 @@ local function teleportLoop()
         end
 
         local jobId = jobIds[currentIndex]
+        CurrentLabel.Text = "Сервер: " .. tostring(currentIndex) .. "/" .. tostring(#jobIds)
         currentIndex += 1
 
         TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
@@ -40,7 +41,7 @@ ScreenGui.Name = "TeleportGui"
 
 local Frame = Instance.new("Frame", ScreenGui)
 Frame.Position = UDim2.new(0.3, 0, 0.3, 0)
-Frame.Size = UDim2.new(0, 250, 0, 130)
+Frame.Size = UDim2.new(0, 250, 0, 160)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
 Frame.Active = true
@@ -68,6 +69,17 @@ SpeedBox.TextColor3 = Color3.new(1, 1, 1)
 SpeedBox.Font = Enum.Font.SourceSans
 SpeedBox.TextSize = 20
 
+-- Новый элемент: текущий номер
+CurrentLabel = Instance.new("TextLabel", Frame)
+CurrentLabel.Size = UDim2.new(1, -20, 0, 25)
+CurrentLabel.Position = UDim2.new(0, 10, 0, 100)
+CurrentLabel.Text = "Сервер: -"
+CurrentLabel.BackgroundTransparency = 1
+CurrentLabel.TextColor3 = Color3.new(1, 1, 1)
+CurrentLabel.Font = Enum.Font.SourceSansBold
+CurrentLabel.TextSize = 20
+CurrentLabel.TextXAlignment = Enum.TextXAlignment.Center
+
 local function toggle()
     running = not running
     ToggleButton.Text = running and "Stop" or "Start"
@@ -81,5 +93,5 @@ end
 
 ToggleButton.MouseButton1Click:Connect(toggle)
 
--- Начинаем загрузку jobId
+-- Загружаем jobId при запуске
 loadJobIds()
