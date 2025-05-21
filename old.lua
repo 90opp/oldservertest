@@ -46,41 +46,48 @@ local serverIds = {
 	"ea807338-9cf3-4cd6-a8c5-d2c53587a282"
 }
 
-local triedServers = {}
+local tried = {}
 
-local function teleportToRandom()
-	if #triedServers >= #serverIds then
-		warn("[Скрипт] Все сервера были перепробованы.")
-		return
+local function tryNextServer()
+	if #tried >= #serverIds then
+		warn("[Скрипт] Все сервера перепробованы.")
+		return false
 	end
 
 	local index
 	repeat
 		index = math.random(1, #serverIds)
-	until not triedServers[index]
+	until not tried[index]
 
+	tried[index] = true
 	local jobId = serverIds[index]
-	triedServers[index] = true
 
-	print("[Скрипт] Пытаемся телепортироваться на сервер: " .. jobId)
+	print("[Скрипт] Пытаемся на сервер: " .. jobId)
 
 	local success, result = pcall(function()
-		TeleportService:TeleportToPrivateServer(placeId, jobId, {LocalPlayer})
+		return TeleportService:TeleportToPrivateServer(placeId, jobId, {LocalPlayer})
 	end)
 
 	if not success then
-		if string.find(result, "full") then
-			warn("[Скрипт] Сервер полный: " .. jobId)
-			task.wait(10)
-			teleportToRandom()
+		result = tostring(result):lower()
+		if result:find("full") or result:find("request failed") then
+			warn("[Скрипт] Сервер полный или недоступен: " .. jobId)
+			return true -- продолжаем пробовать
+		elseif result:find("cluster") or result:find("shutdown") or result:find("invalid") then
+			warn("[Скрипт] Сервер не существует/кластер оффлайн: " .. jobId)
+			return true -- продолжаем пробовать
 		else
-			warn("[Скрипт] Ошибка телепортации: ", result)
+			warn("[Скрипт] Неизвестная ошибка: " .. result)
+			return true -- всё равно продолжаем
 		end
 	end
+
+	return false -- если успех, скрипт не продолжится (телепорт ушёл)
 end
 
--- Запускаем попытки каждые 5 секунд
+-- Цикл попыток
 while true do
-	task.wait(5)
-	teleportToRandom()
+	local keepTrying = tryNextServer()
+	if not keepTrying then break end
+	task.wait(3)
 end
