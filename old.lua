@@ -49,13 +49,14 @@ local jobIds = {
 
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 local PlaceId = game.PlaceId
 
 local current = 1
 
 local function tryTeleport()
     if current > #jobIds then
-        warn("❌ Все сервера перепробованы.")
+        warn("❌ Все JobId перепробованы. Телепорт не удался.")
         return
     end
 
@@ -63,15 +64,22 @@ local function tryTeleport()
     print("🔁 Пробуем телепорт на:", jobId)
 
     local success, result = pcall(function()
-        return TeleportService:TeleportToPlaceInstance(PlaceId, jobId, Players.LocalPlayer)
+        return TeleportService:TeleportToPlaceInstance(PlaceId, jobId, LocalPlayer)
     end)
 
     if success then
-        print("✅ Телепорт отправлен.")
+        print("✅ Телепорт инициирован. Ждём переход...")
+        -- игрок будет перенаправлен
     else
-        warn("⚠️ Не удалось телепортироваться:", result)
-        current += 1
-        task.delay(1.5, tryTeleport)
+        warn("⚠️ Ошибка телепорта:", result)
+        if tostring(result):find("experience is full") then
+            print("⛔ Сервер полный. Пробуем следующий...")
+            current += 1
+            task.wait(0.5)
+            tryTeleport()
+        else
+            warn("❗ Другая ошибка. Скрипт остановлен.")
+        end
     end
 end
 
