@@ -1,7 +1,4 @@
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-
+-- CONFIG
 local placeId = 126884695634066
 
 local serverIds = {
@@ -46,48 +43,55 @@ local serverIds = {
 	"ea807338-9cf3-4cd6-a8c5-d2c53587a282"
 }
 
-local tried = {}
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local function tryNextServer()
-	if #tried >= #serverIds then
-		warn("[Скрипт] Все сервера перепробованы.")
-		return false
-	end
-
-	local index
-	repeat
-		index = math.random(1, #serverIds)
-	until not tried[index]
-
-	tried[index] = true
-	local jobId = serverIds[index]
-
-	print("[Скрипт] Пытаемся на сервер: " .. jobId)
-
-	local success, result = pcall(function()
-		return TeleportService:TeleportToPrivateServer(placeId, jobId, {LocalPlayer})
-	end)
-
-	if not success then
-		result = tostring(result):lower()
-		if result:find("full") or result:find("request failed") then
-			warn("[Скрипт] Сервер полный или недоступен: " .. jobId)
-			return true -- продолжаем пробовать
-		elseif result:find("cluster") or result:find("shutdown") or result:find("invalid") then
-			warn("[Скрипт] Сервер не существует/кластер оффлайн: " .. jobId)
-			return true -- продолжаем пробовать
-		else
-			warn("[Скрипт] Неизвестная ошибка: " .. result)
-			return true -- всё равно продолжаем
-		end
-	end
-
-	return false -- если успех, скрипт не продолжится (телепорт ушёл)
+-- 🛠 создаём RemoteEvent, если его нет
+local remote = ReplicatedStorage:FindFirstChild("TeleportEvent")
+if not remote then
+    remote = Instance.new("RemoteEvent")
+    remote.Name = "TeleportEvent"
+    remote.Parent = ReplicatedStorage
 end
 
--- Цикл попыток
-while true do
-	local keepTrying = tryNextServer()
-	if not keepTrying then break end
-	task.wait(3)
-end
+-- 📦 создаём серверную функцию
+remote.OnServerEvent:Connect(function(player)
+    local tried = {}
+
+    local function tryNext()
+        if #tried >= #serverIds then
+            warn("[Teleport] Все сервера использованы.")
+            return
+        end
+
+        local index
+        repeat
+            index = math.random(1, #serverIds)
+        until not tried[index]
+
+        tried[index] = true
+        local jobId = serverIds[index]
+
+        print("[Teleport] Пробуем: " .. jobId)
+
+        local success, result = pcall(function()
+            TeleportService:TeleportToPrivateServer(placeId, jobId, {player})
+        end)
+
+        if not success then
+            result = tostring(result):lower()
+            if result:find("full") or result:find("request failed") or result:find("cluster") or result:find("shutdown") then
+                warn("[Teleport] Неудача: " .. result)
+                task.delay(10, tryNext)
+            else
+                warn("[Teleport] Ошибка: " .. result)
+                task.delay(10, tryNext)
+            end
+        end
+    end
+
+    tryNext()
+end)
+
+-- 🚀 триггер с клиента (один раз)
+remote:FireServer()
