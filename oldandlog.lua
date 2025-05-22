@@ -1,157 +1,142 @@
---// Roblox Discord Webhook GUI + КД
-
-local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local HttpService = game:GetService("HttpService")
 
--- Функция для безопасного вызова request (Synapse X и др.)
-local requestFunc = syn and syn.request or request or http_request
-if not requestFunc then
-    warn("HTTP request function not found! Запускать нужно в эксплойте.")
-    return
+local isRunning = false
+local currentIndex = 1
+local jobIds = {}
+local webhookUrl = ""
+local delayTime = 10
+
+local function sendRequest(req)
+    if syn and syn.request then
+        return syn.request(req)
+    elseif http_request then
+        return http_request(req)
+    elseif request then
+        return request(req)
+    else
+        error("HTTP request function is not available in this executor.")
+    end
 end
 
--- Создаем GUI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "WebhookSenderGui"
-screenGui.Parent = playerGui
+local function sendWebhook(message)
+    if webhookUrl == nil or webhookUrl == "" then return end
+    local payload = {
+        content = message
+    }
+    local success, response = pcall(function()
+        return sendRequest({
+            Url = webhookUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
+    if not success then
+        warn("❌ Webhook Error:", response)
+    else
+        if response.StatusCode ~= 204 and response.StatusCode ~= 200 then
+            warn("Webhook returned status code:", response.StatusCode)
+        end
+    end
+end
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 350, 0, 200)
-frame.Position = UDim2.new(0.5, -175, 0.5, -100)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-frame.BorderSizePixel = 0
-frame.Parent = screenGui
+-- GUI
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "TPTool"
 
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 10)
-uiCorner.Parent = frame
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Position = UDim2.new(0.3, 0, 0.3, 0)
+mainFrame.Size = UDim2.new(0, 320, 0, 210)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
 
--- Заголовок
-local title = Instance.new("TextLabel")
-title.Text = "Discord Webhook Sender"
-title.Size = UDim2.new(1, 0, 0, 30)
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 20
-title.Parent = frame
-
--- Крестик (закрыть)
-local closeBtn = Instance.new("TextButton")
-closeBtn.Text = "X"
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0, 0)
-closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-closeBtn.TextColor3 = Color3.new(1,1,1)
-closeBtn.Font = Enum.Font.SourceSansBold
-closeBtn.TextSize = 20
-closeBtn.Parent = frame
-
-closeBtn.MouseButton1Click:Connect(function()
+local closeButton = Instance.new("TextButton", mainFrame)
+closeButton.Text = "✖"
+closeButton.Size = UDim2.new(0, 30, 0, 30)
+closeButton.Position = UDim2.new(1, -35, 0, 5)
+closeButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+closeButton.TextColor3 = Color3.new(1, 1, 1)
+closeButton.MouseButton1Click:Connect(function()
     screenGui:Destroy()
+    isRunning = false
 end)
 
--- Ввод вебхука
-local webhookInput = Instance.new("TextBox")
-webhookInput.PlaceholderText = "Вставьте Discord Webhook URL"
-webhookInput.Size = UDim2.new(1, -20, 0, 40)
-webhookInput.Position = UDim2.new(0, 10, 0, 40)
-webhookInput.ClearTextOnFocus = false
-webhookInput.Text = ""
-webhookInput.TextWrapped = true
-webhookInput.TextXAlignment = Enum.TextXAlignment.Left
-webhookInput.Font = Enum.Font.SourceSans
-webhookInput.TextSize = 16
-webhookInput.Parent = frame
+local startButton = Instance.new("TextButton", mainFrame)
+startButton.Text = "Старт"
+startButton.Size = UDim2.new(0.45, 0, 0, 40)
+startButton.Position = UDim2.new(0.05, 0, 0.65, 0)
+startButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+startButton.TextColor3 = Color3.new(1,1,1)
 
--- Ввод КД (задержки)
-local cdInput = Instance.new("TextBox")
-cdInput.PlaceholderText = "Введите задержку между сообщениями (сек)"
-cdInput.Size = UDim2.new(1, -20, 0, 40)
-cdInput.Position = UDim2.new(0, 10, 0, 90)
-cdInput.ClearTextOnFocus = false
-cdInput.Text = "5" -- по умолчанию 5 секунд
-cdInput.TextXAlignment = Enum.TextXAlignment.Left
-cdInput.Font = Enum.Font.SourceSans
-cdInput.TextSize = 16
-cdInput.Parent = frame
+local stopButton = Instance.new("TextButton", mainFrame)
+stopButton.Text = "Стоп"
+stopButton.Size = UDim2.new(0.45, 0, 0, 40)
+stopButton.Position = UDim2.new(0.5, 0, 0.65, 0)
+stopButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+stopButton.TextColor3 = Color3.new(1,1,1)
 
--- Кнопка Старт/Стоп
-local startBtn = Instance.new("TextButton")
-startBtn.Text = "Старт"
-startBtn.Size = UDim2.new(0.5, -15, 0, 40)
-startBtn.Position = UDim2.new(0, 10, 0, 140)
-startBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-startBtn.TextColor3 = Color3.new(1,1,1)
-startBtn.Font = Enum.Font.SourceSansBold
-startBtn.TextSize = 18
-startBtn.Parent = frame
+local delayBox = Instance.new("TextBox", mainFrame)
+delayBox.PlaceholderText = "Задержка (сек)"
+delayBox.Size = UDim2.new(0.9, 0, 0, 30)
+delayBox.Position = UDim2.new(0.05, 0, 0.15, 0)
+delayBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+delayBox.TextColor3 = Color3.new(1, 1, 1)
 
-local stopBtn = Instance.new("TextButton")
-stopBtn.Text = "Стоп"
-stopBtn.Size = UDim2.new(0.5, -15, 0, 40)
-stopBtn.Position = UDim2.new(0.5, 5, 0, 140)
-stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-stopBtn.TextColor3 = Color3.new(1,1,1)
-stopBtn.Font = Enum.Font.SourceSansBold
-stopBtn.TextSize = 18
-stopBtn.Parent = frame
+local webhookBox = Instance.new("TextBox", mainFrame)
+webhookBox.PlaceholderText = "Discord Webhook URL"
+webhookBox.Size = UDim2.new(0.9, 0, 0, 30)
+webhookBox.Position = UDim2.new(0.05, 0, 0.35, 0)
+webhookBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+webhookBox.TextColor3 = Color3.new(1, 1, 1)
 
-stopBtn.Visible = false
-
--- Функция отправки сообщения в Discord webhook
-local function SendMessage(url, message)
-    local headers = {["Content-Type"] = "application/json"}
-    local data = {["content"] = message}
-    local body = HttpService:JSONEncode(data)
-
-    local response = requestFunc({
-        Url = url,
-        Method = "POST",
-        Headers = headers,
-        Body = body
-    })
-
-    print("Message sent! Status:", response.StatusCode)
-    return response.StatusCode == 204 or response.StatusCode == 200
-end
-
--- Переменная для контроля цикла отправки
-local sending = false
-
--- Цикл отправки сообщений с задержкой
-local function StartSending()
-    local webhook = webhookInput.Text
-    local cd = tonumber(cdInput.Text)
-    if not webhook or webhook == "" then
-        warn("Введите валидный webhook URL")
-        return
-    end
-    if not cd or cd < 1 then
-        warn("Введите корректное число для задержки (от 1 секунды)")
-        return
-    end
-
-    sending = true
-    startBtn.Visible = false
-    stopBtn.Visible = true
-
-    while sending do
-        local success = SendMessage(webhook, "Тестовое сообщение с задержкой " .. cd .. " секунд.")
-        if not success then
-            warn("Ошибка отправки сообщения!")
+local function loadJobIds()
+    local success, raw = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
+    end)
+    if success then
+        jobIds = {}
+        for jobId in string.gmatch(raw, "[^\r\n]+") do
+            table.insert(jobIds, jobId)
         end
-        wait(cd)
+        sendWebhook("🟢 Скрипт запущен. Загружено серверов: " .. #jobIds)
+        print("Загружено серверов:", #jobIds)
+    else
+        warn("Не удалось загрузить сервера")
+        sendWebhook("⚠️ Не удалось загрузить список серверов.")
     end
 end
 
-local function StopSending()
-    sending = false
-    startBtn.Visible = true
-    stopBtn.Visible = false
+local function startTeleporting()
+    isRunning = true
+    while isRunning and currentIndex <= #jobIds do
+        local jobId = jobIds[currentIndex]
+        print("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
+        sendWebhook("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
+        wait(delayTime)
+        currentIndex += 1
+    end
+    isRunning = false
 end
 
-startBtn.MouseButton1Click:Connect(StartSending)
-stopBtn.MouseButton1Click:Connect(StopSending)
+startButton.MouseButton1Click:Connect(function()
+    if not isRunning then
+        webhookUrl = webhookBox.Text
+        delayTime = tonumber(delayBox.Text) or 10
+        currentIndex = 1
+        loadJobIds()
+        -- Чтобы подождать загрузку серверов перед стартом телепортации,
+        -- можно сделать небольшой delay или вызвать startTeleporting после загрузки
+        -- но у нас loadJobIds синхронная
+        startTeleporting()
+    end
+end)
+
+stopButton.MouseButton1Click:Connect(function()
+    isRunning = false
+end)
