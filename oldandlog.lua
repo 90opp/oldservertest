@@ -1,143 +1,131 @@
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 
-local isRunning = false
-local currentIndex = 1
+local player = Players.LocalPlayer
+local placeId = 126884695634066
+local webhookUrl = "https://discord.com/api/webhooks/..." -- <<< ВСТАВЬ СВОЙ WEBHOOK СЮДА
+
 local jobIds = {}
-local webhookUrl = ""
-local delayTime = 10
+local currentIndex = 1
+local running = false
+local interval = 10
 
-local function sendRequest(req)
-    if syn and syn.request then
-        return syn.request(req)
-    elseif http_request then
-        return http_request(req)
-    elseif request then
-        return request(req)
-    else
-        error("HTTP request function is not available in this executor.")
-    end
-end
-
-local function sendWebhook(message)
-    if webhookUrl == nil or webhookUrl == "" then return end
-    local payload = {
-        content = message
-    }
-    local success, response = pcall(function()
-        return sendRequest({
-            Url = webhookUrl,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
-            Body = HttpService:JSONEncode(payload)
-        })
-    end)
-    if not success then
-        warn("❌ Webhook Error:", response)
-    end
-end
-
--- Обработка ошибки телепортации — просто логируем, не останавливаем цикл
-TeleportService.TeleportFailed:Connect(function(playerWho, teleportResult, errorMessage)
-    if playerWho == player then
-        sendWebhook("❌ Ошибка телепортации: ".. tostring(errorMessage or "Неизвестная ошибка"))
-        warn("Ошибка телепортации:", errorMessage)
-        -- НЕ останавливаем isRunning, цикл продолжит работать
-    end
-end)
-
--- GUI
-local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-screenGui.Name = "TPTool"
-
-local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Position = UDim2.new(0.3, 0, 0.3, 0)
-mainFrame.Size = UDim2.new(0, 320, 0, 210)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.BorderSizePixel = 0
-
-local closeButton = Instance.new("TextButton", mainFrame)
-closeButton.Text = "✖"
-closeButton.Size = UDim2.new(0, 30, 0, 30)
-closeButton.Position = UDim2.new(1, -35, 0, 5)
-closeButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
-closeButton.TextColor3 = Color3.new(1, 1, 1)
-closeButton.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
-end)
-
-local startButton = Instance.new("TextButton", mainFrame)
-startButton.Text = "Старт"
-startButton.Size = UDim2.new(0.45, 0, 0, 40)
-startButton.Position = UDim2.new(0.05, 0, 0.65, 0)
-startButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-startButton.TextColor3 = Color3.new(1,1,1)
-
-local stopButton = Instance.new("TextButton", mainFrame)
-stopButton.Text = "Стоп"
-stopButton.Size = UDim2.new(0.45, 0, 0, 40)
-stopButton.Position = UDim2.new(0.5, 0, 0.65, 0)
-stopButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-stopButton.TextColor3 = Color3.new(1,1,1)
-
-local delayBox = Instance.new("TextBox", mainFrame)
-delayBox.PlaceholderText = "Задержка (сек)"
-delayBox.Size = UDim2.new(0.9, 0, 0, 30)
-delayBox.Position = UDim2.new(0.05, 0, 0.15, 0)
-delayBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-delayBox.TextColor3 = Color3.new(1, 1, 1)
-
-local webhookBox = Instance.new("TextBox", mainFrame)
-webhookBox.PlaceholderText = "Discord Webhook URL"
-webhookBox.Size = UDim2.new(0.9, 0, 0, 30)
-webhookBox.Position = UDim2.new(0.05, 0, 0.35, 0)
-webhookBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-webhookBox.TextColor3 = Color3.new(1, 1, 1)
-
--- Загрузка jobId'ов
+-- Загружаем список jobId
 local function loadJobIds()
-    local success, raw = pcall(function()
-        return game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
-    end)
-    if success then
-        jobIds = {}
-        for jobId in string.gmatch(raw, "[^\r\n]+") do
-            table.insert(jobIds, jobId)
+    local raw = game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
+    for jobId in string.gmatch(raw, "[^\r\n]+") do
+        table.insert(jobIds, jobId)
+    end
+    print("Загружено серверов:", #jobIds)
+end
+
+-- Webhook логер
+local function logToDiscord(text)
+    local payload = { content = text }
+    local requestData = {
+        Url = webhookUrl,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = HttpService:JSONEncode(payload)
+    }
+
+    pcall(function()
+        if syn and syn.request then
+            syn.request(requestData)
+        elseif request then
+            request(requestData)
+        elseif http_request then
+            http_request(requestData)
         end
-        sendWebhook("🟢 Скрипт запущен. Загружено серверов: " .. #jobIds)
-        print("Загружено серверов:", #jobIds)
-    else
-        warn("Не удалось загрузить сервера")
-    end
+    end)
 end
 
-local function startTeleporting()
-    isRunning = true
-    while isRunning and currentIndex <= #jobIds do
+-- Телепорт по очереди
+local function teleportLoop()
+    while running do
+        if currentIndex > #jobIds then
+            currentIndex = 1
+        end
+
         local jobId = jobIds[currentIndex]
-        print("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
-        sendWebhook("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
-        wait(delayTime)
+        CurrentLabel.Text = "Сервер: " .. tostring(currentIndex) .. "/" .. tostring(#jobIds)
+        local logMessage = string.format("🔄 Попытка %d/%d\nJobId: `%s`", currentIndex, #jobIds, jobId)
+        logToDiscord(logMessage)
+
         currentIndex += 1
+
+        local success, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+        end)
+
+        if not success then
+            logToDiscord("❌ Ошибка телепорта: `" .. tostring(err) .. "`")
+        else
+            logToDiscord("✅ Телепорт вызван (если не перенесло — сервер фулл или невалидный)")
+        end
+
+        task.wait(interval)
     end
-    isRunning = false
 end
 
-startButton.MouseButton1Click:Connect(function()
-    if not isRunning then
-        webhookUrl = webhookBox.Text
-        delayTime = tonumber(delayBox.Text) or 10
-        currentIndex = 1
-        loadJobIds()
-        startTeleporting()
-    end
-end)
+-- UI
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "TeleportGui"
 
-stopButton.MouseButton1Click:Connect(function()
-    isRunning = false
-end)
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Position = UDim2.new(0.3, 0, 0.3, 0)
+Frame.Size = UDim2.new(0, 250, 0, 160)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+
+local UICorner = Instance.new("UICorner", Frame)
+UICorner.CornerRadius = UDim.new(0, 8)
+
+local ToggleButton = Instance.new("TextButton", Frame)
+ToggleButton.Size = UDim2.new(1, -20, 0, 40)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+ToggleButton.Text = "Start"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 22
+
+local SpeedBox = Instance.new("TextBox", Frame)
+SpeedBox.Size = UDim2.new(1, -20, 0, 30)
+SpeedBox.Position = UDim2.new(0, 10, 0, 60)
+SpeedBox.PlaceholderText = "Интервал (сек)"
+SpeedBox.Text = tostring(interval)
+SpeedBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SpeedBox.TextColor3 = Color3.new(1, 1, 1)
+SpeedBox.Font = Enum.Font.SourceSans
+SpeedBox.TextSize = 20
+
+-- Новый элемент: текущий номер
+CurrentLabel = Instance.new("TextLabel", Frame)
+CurrentLabel.Size = UDim2.new(1, -20, 0, 25)
+CurrentLabel.Position = UDim2.new(0, 10, 0, 100)
+CurrentLabel.Text = "Сервер: -"
+CurrentLabel.BackgroundTransparency = 1
+CurrentLabel.TextColor3 = Color3.new(1, 1, 1)
+CurrentLabel.Font = Enum.Font.SourceSansBold
+CurrentLabel.TextSize = 20
+CurrentLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+local function toggle()
+    running = not running
+    ToggleButton.Text = running and "Stop" or "Start"
+    ToggleButton.BackgroundColor3 = running and Color3.fromRGB(170, 0, 0) or Color3.fromRGB(0, 170, 0)
+
+    if running then
+        interval = tonumber(SpeedBox.Text) or 10
+        coroutine.wrap(teleportLoop)()
+    end
+end
+
+ToggleButton.MouseButton1Click:Connect(toggle)
+
+-- Загружаем jobId при запуске
+loadJobIds()
