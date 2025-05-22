@@ -1,108 +1,137 @@
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-local player = Players.LocalPlayer
+-- ⚙ Настройки
+local webhookUrl = "https://discord.com/api/webhooks/1369788968308183100/92N-vJra_IFxv2hCsGrr1P27s0fOz-7EFAPXWufAw0suTjOqpDdMmAttDUUXIlPf3-ze"
+local serverListUrl = "https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt"
+local placeId = 126884695634066
 
+-- 📦 Переменные
 local jobIds = {}
 local currentIndex = 1
 local running = false
-local delayBetween = 10
+local delaySeconds = 10
 
-local webhookUrl = "https://discord.com/api/webhooks/1369788968308183100/92N-vJra_IFxv2hCsGrr1P27s0fOz-7EFAPXWufAw0suTjOqpDdMmAttDUUXIlPf3-ze"
-
--- 📥 Загрузка jobId-ов
-local function loadJobIds()
-    local raw = game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
-    for jobId in string.gmatch(raw, "[^\r\n]+") do
-        table.insert(jobIds, jobId)
-    end
-    print("Загружено серверов:", #jobIds)
-end
-
--- 📬 Лог в Discord
+-- 📡 Отправка логов в Discord
 local function sendLog(message)
-    local payload = HttpService:JSONEncode({ content = message })
-    pcall(function()
-        HttpService:PostAsync(webhookUrl, payload, Enum.HttpContentType.ApplicationJson)
-    end)
+    local json = game:GetService("HttpService"):JSONEncode({ content = message })
+    local req = (http_request or request or syn and syn.request)
+
+    if req then
+        pcall(function()
+            req({
+                Url = webhookUrl,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = json
+            })
+        end)
+    else
+        warn("❌ Нет поддержки HTTP-запросов в вашем эксплойте.")
+    end
 end
 
--- 🚀 Телепорт
-local function startTeleport()
-    while running and currentIndex <= #jobIds do
-        local jobId = jobIds[currentIndex]
-        StatusLabel.Text = "Телепорт " .. currentIndex .. "/" .. #jobIds
-        sendLog("➡️ Попытка " .. currentIndex .. ": `" .. jobId .. "`")
+-- ✅ Тестируем Webhook при запуске
+sendLog("🟢 Запуск скрипта. Подключение к Webhook успешно.")
 
-        local success, err = pcall(function()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
-        end)
+-- 🔁 Загрузка JobId
+local function loadJobIds()
+    local success, result = pcall(function()
+        return game:HttpGet(serverListUrl)
+    end)
 
-        if not success then
-            sendLog("❌ Ошибка на " .. currentIndex .. ": `" .. tostring(err) .. "`")
+    if success then
+        for jobId in string.gmatch(result, "[^\r\n]+") do
+            table.insert(jobIds, jobId)
         end
+        print("✅ Загружено серверов:", #jobIds)
+        sendLog("✅ Загружено серверов: " .. tostring(#jobIds))
+    else
+        warn("❌ Ошибка загрузки серверов:", result)
+        sendLog("❌ Ошибка загрузки серверов: " .. tostring(result))
+    end
+end
 
-        currentIndex += 1
-        task.wait(delayBetween)
+-- 🚀 Телепорт по JobId
+local function teleportNext()
+    if currentIndex > #jobIds then
+        sendLog("🔁 Все сервера проверены. Сброс.")
+        currentIndex = 1
+        return
     end
 
-    running = false
-    ToggleButton.Text = "Start"
-    StatusLabel.Text = "Finished"
-    sendLog("✅ Завершён обход всех серверов.")
+    local jobId = jobIds[currentIndex]
+    sendLog("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
+
+    local success, err = pcall(function()
+        game:GetService("TeleportService"):TeleportToPlaceInstance(placeId, jobId, game.Players.LocalPlayer)
+    end)
+
+    if not success then
+        warn("⚠ Ошибка телепорта: ", err)
+        sendLog("⚠ Ошибка телепорта: " .. tostring(err))
+    end
+
+    currentIndex += 1
 end
 
--- 🖼️ GUI
-local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-ScreenGui.Name = "TeleporterGUI"
-
-local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 220, 0, 170)
-Frame.Position = UDim2.new(0.5, -110, 0.3, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-
-local ToggleButton = Instance.new("TextButton", Frame)
-ToggleButton.Size = UDim2.new(1, -20, 0, 40)
-ToggleButton.Position = UDim2.new(0, 10, 0, 10)
-ToggleButton.Text = "Start"
-ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-ToggleButton.TextColor3 = Color3.new(1, 1, 1)
-
-local DelayBox = Instance.new("TextBox", Frame)
-DelayBox.Size = UDim2.new(1, -20, 0, 30)
-DelayBox.Position = UDim2.new(0, 10, 0, 60)
-DelayBox.PlaceholderText = "Delay (sec)"
-DelayBox.Text = tostring(delayBetween)
-DelayBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-DelayBox.TextColor3 = Color3.new(1, 1, 1)
-
-StatusLabel = Instance.new("TextLabel", Frame)
-StatusLabel.Size = UDim2.new(1, -20, 0, 30)
-StatusLabel.Position = UDim2.new(0, 10, 0, 100)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Idle"
-StatusLabel.TextColor3 = Color3.new(1, 1, 1)
-StatusLabel.TextScaled = true
-
--- 🟢 Кнопка Start/Stop
-ToggleButton.MouseButton1Click:Connect(function()
-    if running then
-        running = false
-        ToggleButton.Text = "Start"
-        StatusLabel.Text = "Остановлено"
-        sendLog("⏹️ Скрипт остановлен вручную.")
-    else
-        delayBetween = tonumber(DelayBox.Text) or 10
-        currentIndex = 1
-        jobIds = {}
-        loadJobIds()
-        if #jobIds > 0 then
-            running = true
-            ToggleButton.Text = "Stop"
-            sendLog("▶️ Запуск обхода серверов...")
-            task.spawn(startTeleport)
+-- ⏱️ Основной цикл
+task.spawn(function()
+    while true do
+        if running then
+            teleportNext()
+            task.wait(delaySeconds)
         else
-            StatusLabel.Text = "Список пуст"
+            task.wait(1)
         end
     end
 end)
+
+-- 🖼️ GUI
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 250, 0, 140)
+Frame.Position = UDim2.new(0.5, -125, 0.5, -70)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+
+local toggle = Instance.new("TextButton", Frame)
+toggle.Size = UDim2.new(1, -20, 0, 40)
+toggle.Position = UDim2.new(0, 10, 0, 10)
+toggle.Text = "▶ Старт"
+toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggle.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+
+local delayBox = Instance.new("TextBox", Frame)
+delayBox.Size = UDim2.new(1, -20, 0, 30)
+delayBox.Position = UDim2.new(0, 10, 0, 60)
+delayBox.PlaceholderText = "Задержка (сек)"
+delayBox.Text = tostring(delaySeconds)
+delayBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+delayBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+local statusLabel = Instance.new("TextLabel", Frame)
+statusLabel.Size = UDim2.new(1, -20, 0, 30)
+statusLabel.Position = UDim2.new(0, 10, 0, 100)
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Ожидание..."
+
+-- 🔘 Обработка кнопок
+toggle.MouseButton1Click:Connect(function()
+    running = not running
+    toggle.Text = running and "⏸ Стоп" or "▶ Старт"
+    toggle.BackgroundColor3 = running and Color3.fromRGB(170, 0, 0) or Color3.fromRGB(0, 170, 0)
+    statusLabel.Text = running and "✅ Активно" or "⏸ Остановлено"
+end)
+
+delayBox.FocusLost:Connect(function()
+    local value = tonumber(delayBox.Text)
+    if value and value >= 1 then
+        delaySeconds = value
+    else
+        delayBox.Text = tostring(delaySeconds)
+    end
+end)
+
+-- ⏬ Загрузка серверов при старте
+loadJobIds()
