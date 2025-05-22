@@ -15,20 +15,17 @@ local teleportConnection
 
 -- Функция отправки сообщения в Discord
 local function sendLog(message)
-    if not message or message == "" then return end
-    if #message > 1900 then
-        message = string.sub(message, 1, 1900) .. "..."
-    end
-
-    local data = { content = message }
+    local data = {
+        content = message
+    }
     local jsonData = HttpService:JSONEncode(data)
 
-    local success, err = pcall(function()
+    local success, response = pcall(function()
         game:HttpPost(webhookUrl, jsonData, Enum.HttpContentType.ApplicationJson)
     end)
 
     if not success then
-        warn("❌ Webhook ошибка: ", err)
+        warn("❌ Ошибка отправки webhook: ", response)
     end
 end
 
