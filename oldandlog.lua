@@ -38,12 +38,17 @@ local function sendWebhook(message)
     end)
     if not success then
         warn("❌ Webhook Error:", response)
-    else
-        if response.StatusCode ~= 204 and response.StatusCode ~= 200 then
-            warn("Webhook returned status code:", response.StatusCode)
-        end
     end
 end
+
+-- Обработка ошибки телепортации — просто логируем, не останавливаем цикл
+TeleportService.TeleportFailed:Connect(function(playerWho, teleportResult, errorMessage)
+    if playerWho == player then
+        sendWebhook("❌ Ошибка телепортации: ".. tostring(errorMessage or "Неизвестная ошибка"))
+        warn("Ошибка телепортации:", errorMessage)
+        -- НЕ останавливаем isRunning, цикл продолжит работать
+    end
+end)
 
 -- GUI
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
@@ -63,7 +68,6 @@ closeButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
 closeButton.TextColor3 = Color3.new(1, 1, 1)
 closeButton.MouseButton1Click:Connect(function()
     screenGui:Destroy()
-    isRunning = false
 end)
 
 local startButton = Instance.new("TextButton", mainFrame)
@@ -94,6 +98,7 @@ webhookBox.Position = UDim2.new(0.05, 0, 0.35, 0)
 webhookBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 webhookBox.TextColor3 = Color3.new(1, 1, 1)
 
+-- Загрузка jobId'ов
 local function loadJobIds()
     local success, raw = pcall(function()
         return game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
@@ -107,7 +112,6 @@ local function loadJobIds()
         print("Загружено серверов:", #jobIds)
     else
         warn("Не удалось загрузить сервера")
-        sendWebhook("⚠️ Не удалось загрузить список серверов.")
     end
 end
 
@@ -130,9 +134,6 @@ startButton.MouseButton1Click:Connect(function()
         delayTime = tonumber(delayBox.Text) or 10
         currentIndex = 1
         loadJobIds()
-        -- Чтобы подождать загрузку серверов перед стартом телепортации,
-        -- можно сделать небольшой delay или вызвать startTeleporting после загрузки
-        -- но у нас loadJobIds синхронная
         startTeleporting()
     end
 end)
