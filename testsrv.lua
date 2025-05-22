@@ -1,135 +1,114 @@
-local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer
-local placeId = game.PlaceId -- автоматом из текущей игры
-local jobIds = {
-    "27a4c470-5756-4d09-a8e7-31fd87f183fd",
-    -- добавь другие jobId ниже
-}
 
-local isRunning = false
-local delayTime = 10
-local currentIndex = 1
-local webhookUrl = ""
+local jobIds = {}
+local webhookUrl = "https://discord.com/api/webhooks/1375024901660086272/agHw7Y_gbnMZkwiXtLLGjYWE0EN4dW3t9ShQ3Auc5OtbkUF7_5V5PF8IQS21kEwAup3X"
+local placeId = game.PlaceId
+local universeId = nil
 
--- ========== Webhook ==========
-local function sendRequest(req)
-    if syn and syn.request then
-        return syn.request(req)
-    elseif http_request then
-        return http_request(req)
-    elseif request then
-        return request(req)
-    else
-        warn("❌ HTTP request функция недоступна")
-        return nil
-    end
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "ServerTool"
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 400, 0, 300)
+mainFrame.Position = UDim2.new(0.3, 0, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+local function createButton(text, position, onClick)
+    local button = Instance.new("TextButton", mainFrame)
+    button.Size = UDim2.new(0.9, 0, 0, 40)
+    button.Position = position
+    button.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Text = text
+    button.MouseButton1Click:Connect(onClick)
+    return button
 end
 
 local function sendWebhook(msg)
     if webhookUrl == "" then return end
-    local payload = { content = msg }
-    local success, res = pcall(function()
-        return sendRequest({
-            Url = webhookUrl,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
-            Body = HttpService:JSONEncode(payload)
-        })
+    local payload = {
+        content = msg
+    }
+    local req = {
+        Url = webhookUrl,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(payload)
+    }
+    local success, response = pcall(function()
+        if syn and syn.request then
+            return syn.request(req)
+        elseif request then
+            return request(req)
+        elseif http_request then
+            return http_request(req)
+        end
     end)
-    if not success then
-        warn("Webhook error:", res)
-    end
+    if not success then warn("Webhook error", response) end
 end
 
--- ========== GUI ==========
-local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-screenGui.Name = "JobHopTool"
-
-local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 320, 0, 210)
-mainFrame.Position = UDim2.new(0.3, 0, 0.3, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-mainFrame.BorderSizePixel = 0
-
-local closeButton = Instance.new("TextButton", mainFrame)
-closeButton.Size = UDim2.new(0, 30, 0, 30)
-closeButton.Position = UDim2.new(1, -35, 0, 5)
-closeButton.Text = "✖"
-closeButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
-closeButton.TextColor3 = Color3.new(1, 1, 1)
-closeButton.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
-end)
-
-local startButton = Instance.new("TextButton", mainFrame)
-startButton.Size = UDim2.new(0.45, 0, 0, 40)
-startButton.Position = UDim2.new(0.05, 0, 0.65, 0)
-startButton.Text = "Старт"
-startButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-startButton.TextColor3 = Color3.new(1, 1, 1)
-
-local stopButton = Instance.new("TextButton", mainFrame)
-stopButton.Size = UDim2.new(0.45, 0, 0, 40)
-stopButton.Position = UDim2.new(0.5, 0, 0.65, 0)
-stopButton.Text = "Стоп"
-stopButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-stopButton.TextColor3 = Color3.new(1, 1, 1)
-
-local delayBox = Instance.new("TextBox", mainFrame)
-delayBox.PlaceholderText = "Задержка (сек)"
-delayBox.Size = UDim2.new(0.9, 0, 0, 30)
-delayBox.Position = UDim2.new(0.05, 0, 0.15, 0)
-delayBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-delayBox.TextColor3 = Color3.new(1, 1, 1)
-
-local webhookBox = Instance.new("TextBox", mainFrame)
-webhookBox.PlaceholderText = "Discord Webhook URL"
-webhookBox.Size = UDim2.new(0.9, 0, 0, 30)
-webhookBox.Position = UDim2.new(0.05, 0, 0.35, 0)
-webhookBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-webhookBox.TextColor3 = Color3.new(1, 1, 1)
-
--- ========== Безопасный телепорт ==========
-local function safeTeleport(jobId)
-    local success, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+-- === Загрузка JobId из ссылки ===
+local function loadJobIds()
+    local success, data = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/main/servers.txt")
     end)
-    if not success then
-        warn("❌ Ошибка телепорта на " .. jobId .. ": " .. tostring(err))
-        sendWebhook("❌ Не удалось телепортироваться на сервер " .. jobId .. ": " .. tostring(err))
+    if success then
+        jobIds = {}
+        for line in string.gmatch(data, "[^\r\n]+") do
+            table.insert(jobIds, line)
+        end
+        print("Загружено JobId:", #jobIds)
     else
-        print("🔄 Попытка телепорта: " .. jobId)
-        sendWebhook("🔄 Попытка телепорта на сервер " .. jobId)
+        warn("Не удалось загрузить список серверов")
     end
 end
 
-local function startCycle()
-    isRunning = true
-    while isRunning and currentIndex <= #jobIds do
-        local jobId = jobIds[currentIndex]
-        safeTeleport(jobId)
-        currentIndex += 1
-        wait(delayTime)
+-- === Первая функция: попытка телепортироваться ===
+local function tryTeleportAll()
+    for i, jobId in ipairs(jobIds) do
+        sendWebhook("🌀 Попытка телепорта: " .. jobId)
+        local success, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+        end)
+        if not success then
+            print("❌ Не удалось телепортироваться на сервер:", jobId)
+        end
+        wait(10)
     end
-    isRunning = false
 end
 
-startButton.MouseButton1Click:Connect(function()
-    if not isRunning then
-        webhookUrl = webhookBox.Text
-        delayTime = tonumber(delayBox.Text) or 10
-        currentIndex = 1
-        sendWebhook("🟢 Старт обхода серверов.")
-        startCycle()
+-- === Вторая функция: получить инфо о серверах по jobId ===
+local function getServerInfo(jobId)
+    local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
+    local success, response = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    if success and response and response.data then
+        for _, server in ipairs(response.data) do
+            if server.id == jobId then
+                print("ℹ️ JobId:", jobId, "| Игроков:", server.playing, "/", server.maxPlayers)
+                return true
+            end
+        end
+        print("❌ Сервер не найден:", jobId)
+    else
+        warn("Ошибка получения серверов")
     end
+end
+
+-- === Кнопки ===
+createButton("Проверить сервера (TP)", UDim2.new(0.05, 0, 0.2, 0), function()
+    loadJobIds()
+    tryTeleportAll()
 end)
 
-stopButton.MouseButton1Click:Connect(function()
-    isRunning = false
-    sendWebhook("🔴 Остановка обхода.")
+createButton("Проверить инфо", UDim2.new(0.05, 0, 0.35, 0), function()
+    loadJobIds()
+    for _, jobId in ipairs(jobIds) do
+        getServerInfo(jobId)
+        wait(1)
+    end
 end)
