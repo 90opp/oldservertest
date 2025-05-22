@@ -1,115 +1,99 @@
---// Настройки
-local PLACE_ID = 126884695634066
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1369788968308183100/92N-vJra_IFxv2hCsGrr1P27s0fOz-7EFAPXWufAw0suTjOqpDdMmAttDUUXIlPf3-ze"
+-- ✅ Настройки
+local placeId = 126884695634066
+local webhookUrl = "https://discord.com/api/webhooks/1369788968308183100/92N-vJra_IFxv2hCsGrr1P27s0fOz-7EFAPXWufAw0suTjOqpDdMmAttDUUXIlPf3-ze"
+local delayBetweenTeleports = 10 -- секунд
 
---// Переменные
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-
-local running = false
+-- 📦 Переменные
 local jobIds = {}
-local currentIndex = 0
-local delaySeconds = 10
+local running = false
+local currentIndex = 1
 
---// Функция отправки Webhook через HttpGet
+-- 🔗 Функция отправки в Webhook
 local function sendWebhook(message)
-    local url = WEBHOOK_URL .. "?wait=true&content=" .. HttpService:UrlEncode(message)
-    local success, response = pcall(function()
-        return game:HttpGet(url)
-    end)
+    local payload = {
+        content = message
+    }
+    
+    local encoded = game:GetService("HttpService"):JSONEncode(payload)
 
-    if not success then
-        warn("❌ Webhook Error: " .. tostring(response))
+    local response = syn.request({
+        Url = webhookUrl,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json"
+        },
+        Body = encoded
+    })
+
+    if response.StatusCode == 200 or response.StatusCode == 204 then
+        print("📨 Webhook отправлен успешно.")
     else
-        print("✅ Webhook отправлен.")
+        warn("❌ Ошибка отправки webhook:", response.StatusCode, response.Body)
     end
 end
 
---// Загрузка JobId из файла
+-- 🔄 Загрузка серверов
 local function loadJobIds()
     local raw = game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
     for jobId in string.gmatch(raw, "[^\r\n]+") do
         table.insert(jobIds, jobId)
     end
     print("✅ Загружено серверов:", #jobIds)
-    sendWebhook("🟢 Скрипт запущен. Загружено серверов: " .. tostring(#jobIds))
+    sendWebhook("🟢 Скрипт запущен. Загружено серверов: " .. #jobIds)
 end
 
---// Телепорт по списку
+-- ⏩ Функция телепорта
 local function teleportLoop()
-    while running and currentIndex < #jobIds do
-        currentIndex += 1
+    while running and currentIndex <= #jobIds do
         local jobId = jobIds[currentIndex]
         print("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
         sendWebhook("🔄 Телепорт на сервер #" .. currentIndex .. ": " .. jobId)
-
-        pcall(function()
-            TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, player)
-        end)
-
-        wait(delaySeconds)
+        
+        game:GetService("TeleportService"):TeleportToPlaceInstance(placeId, jobId, game.Players.LocalPlayer)
+        
+        currentIndex += 1
+        wait(delayBetweenTeleports)
     end
 end
 
---// GUI
+-- 🖼️ GUI
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 300, 0, 150)
-Frame.Position = UDim2.new(0.5, -150, 0.5, -75)
-Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Frame.Size = UDim2.new(0, 220, 0, 120)
+Frame.Position = UDim2.new(0.5, -110, 0.5, -60)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
 
-local toggleButton = Instance.new("TextButton", Frame)
-toggleButton.Size = UDim2.new(0, 280, 0, 40)
-toggleButton.Position = UDim2.new(0, 10, 0, 10)
-toggleButton.Text = "▶ Старт"
-toggleButton.BackgroundColor3 = Color3.fromRGB(60, 180, 75)
-toggleButton.TextColor3 = Color3.new(1,1,1)
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextSize = 20
+local StartStopButton = Instance.new("TextButton", Frame)
+StartStopButton.Size = UDim2.new(1, -10, 0, 40)
+StartStopButton.Position = UDim2.new(0, 5, 0, 5)
+StartStopButton.Text = "▶ Старт"
+StartStopButton.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
+StartStopButton.TextColor3 = Color3.new(1, 1, 1)
 
-local delayBox = Instance.new("TextBox", Frame)
-delayBox.Size = UDim2.new(0, 280, 0, 30)
-delayBox.Position = UDim2.new(0, 10, 0, 60)
-delayBox.PlaceholderText = "Задержка (сек): по умолчанию 10"
-delayBox.Text = ""
-delayBox.TextColor3 = Color3.new(1,1,1)
-delayBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-delayBox.Font = Enum.Font.SourceSans
-delayBox.TextSize = 18
+local CloseButton = Instance.new("TextButton", Frame)
+CloseButton.Size = UDim2.new(1, -10, 0, 30)
+CloseButton.Position = UDim2.new(0, 5, 1, -35)
+CloseButton.Text = "✖ Закрыть GUI"
+CloseButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+CloseButton.TextColor3 = Color3.new(1, 1, 1)
 
-local closeButton = Instance.new("TextButton", Frame)
-closeButton.Size = UDim2.new(0, 30, 0, 30)
-closeButton.Position = UDim2.new(1, -35, 0, 5)
-closeButton.Text = "X"
-closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-closeButton.TextColor3 = Color3.new(1,1,1)
-closeButton.Font = Enum.Font.SourceSansBold
-closeButton.TextSize = 20
-
---// Обработчики кнопок
-toggleButton.MouseButton1Click:Connect(function()
+-- ⏯️ Обработчики кнопок
+StartStopButton.MouseButton1Click:Connect(function()
+    running = not running
     if running then
-        running = false
-        toggleButton.Text = "▶ Старт"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(60, 180, 75)
+        StartStopButton.Text = "⏹ Стоп"
+        StartStopButton.BackgroundColor3 = Color3.fromRGB(160, 60, 60)
+        teleportLoop()
     else
-        local val = tonumber(delayBox.Text)
-        if val then
-            delaySeconds = val
-        end
-        running = true
-        toggleButton.Text = "⏸ Стоп"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
-        spawn(teleportLoop)
+        StartStopButton.Text = "▶ Старт"
+        StartStopButton.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
     end
 end)
 
-closeButton.MouseButton1Click:Connect(function()
+CloseButton.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
---// Запуск
+-- 🚀 Старт
 loadJobIds()
