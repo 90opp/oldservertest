@@ -56,9 +56,24 @@ CurrentLabel.Font = Enum.Font.SourceSansBold
 CurrentLabel.TextSize = 20
 CurrentLabel.TextXAlignment = Enum.TextXAlignment.Center
 
+-- Универсальная функция запроса
+local function universalRequest(tbl)
+    local req = (syn and syn.request) or
+                (http and http.request) or
+                (request) or
+                (fluxus and fluxus.request) or
+                (krnl and krnl.request) or
+                (krnl_http_request)
+    if req then
+        return req(tbl)
+    else
+        warn("❌ HTTP-запрос не поддерживается данным экзекьютором")
+    end
+end
+
 -- Функция отправки webhook
 local function sendWebhook(message)
-    syn.request({
+    universalRequest({
         Url = webhook,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
