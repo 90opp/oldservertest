@@ -4,7 +4,7 @@ local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local placeId = 126884695634066
-local webhookUrl = "https://discord.com/api/webhooks/..." -- <<< ВСТАВЬ СВОЙ WEBHOOK СЮДА
+local webhookUrl = "https://discord.com/api/webhooks/1375024901660086272/agHw7Y_gbnMZkwiXtLLGjYWE0EN4dW3t9ShQ3Auc5OtbkUF7_5V5PF8IQS21kEwAup3X" -- <<< ВСТАВЬ СВОЙ WEBHOOK СЮДА
 
 local jobIds = {}
 local currentIndex = 1
