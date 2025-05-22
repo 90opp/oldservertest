@@ -1,73 +1,18 @@
+-- Настройки
+local placeId = 126884695634066
+local interval = 10
+local webhook = "https://discord.com/api/webhooks/1375024901660086272/agHw7Y_gbnMZkwiXtLLGjYWE0EN4dW3t9ShQ3Auc5OtbkUF7_5V5PF8IQS21kEwAup3X" -- Замените на ваш Webhook
+
+-- Roblox сервисы
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer
-local placeId = 126884695634066
-local webhookUrl = "https://discord.com/api/webhooks/1375024901660086272/agHw7Y_gbnMZkwiXtLLGjYWE0EN4dW3t9ShQ3Auc5OtbkUF7_5V5PF8IQS21kEwAup3X" -- <<< ВСТАВЬ СВОЙ WEBHOOK СЮДА
 
+-- Переменные
 local jobIds = {}
 local currentIndex = 1
 local running = false
-local interval = 10
-
--- Загружаем список jobId
-local function loadJobIds()
-    local raw = game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
-    for jobId in string.gmatch(raw, "[^\r\n]+") do
-        table.insert(jobIds, jobId)
-    end
-    print("Загружено серверов:", #jobIds)
-end
-
--- Webhook логер
-local function logToDiscord(text)
-    local payload = { content = text }
-    local requestData = {
-        Url = webhookUrl,
-        Method = "POST",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body = HttpService:JSONEncode(payload)
-    }
-
-    pcall(function()
-        if syn and syn.request then
-            syn.request(requestData)
-        elseif request then
-            request(requestData)
-        elseif http_request then
-            http_request(requestData)
-        end
-    end)
-end
-
--- Телепорт по очереди
-local function teleportLoop()
-    while running do
-        if currentIndex > #jobIds then
-            currentIndex = 1
-        end
-
-        local jobId = jobIds[currentIndex]
-        CurrentLabel.Text = "Сервер: " .. tostring(currentIndex) .. "/" .. tostring(#jobIds)
-        local logMessage = string.format("🔄 Попытка %d/%d\nJobId: `%s`", currentIndex, #jobIds, jobId)
-        logToDiscord(logMessage)
-
-        currentIndex += 1
-
-        local success, err = pcall(function()
-            TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
-        end)
-
-        if not success then
-            logToDiscord("❌ Ошибка телепорта: `" .. tostring(err) .. "`")
-        else
-            logToDiscord("✅ Телепорт вызван (если не перенесло — сервер фулл или невалидный)")
-        end
-
-        task.wait(interval)
-    end
-end
 
 -- UI
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
@@ -80,9 +25,7 @@ Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
 Frame.Active = true
 Frame.Draggable = true
-
-local UICorner = Instance.new("UICorner", Frame)
-UICorner.CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
 
 local ToggleButton = Instance.new("TextButton", Frame)
 ToggleButton.Size = UDim2.new(1, -20, 0, 40)
@@ -103,8 +46,7 @@ SpeedBox.TextColor3 = Color3.new(1, 1, 1)
 SpeedBox.Font = Enum.Font.SourceSans
 SpeedBox.TextSize = 20
 
--- Новый элемент: текущий номер
-CurrentLabel = Instance.new("TextLabel", Frame)
+local CurrentLabel = Instance.new("TextLabel", Frame)
 CurrentLabel.Size = UDim2.new(1, -20, 0, 25)
 CurrentLabel.Position = UDim2.new(0, 10, 0, 100)
 CurrentLabel.Text = "Сервер: -"
@@ -114,6 +56,54 @@ CurrentLabel.Font = Enum.Font.SourceSansBold
 CurrentLabel.TextSize = 20
 CurrentLabel.TextXAlignment = Enum.TextXAlignment.Center
 
+-- Функция отправки webhook
+local function sendWebhook(message)
+    syn.request({
+        Url = webhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode({content = message})
+    })
+end
+
+-- Обработка ошибок телепорта
+TeleportService.TeleportInitFailed:Connect(function(_, result)
+    local jobId = jobIds[currentIndex - 1] or "?"
+    local msg = "❌ Ошибка телепорта:\nJobId: `" .. jobId .. "`\nПричина: `" .. tostring(result) .. "`"
+    warn(msg)
+    sendWebhook(msg)
+end)
+
+-- Загрузка JobId
+local function loadJobIds()
+    local raw = game:HttpGet("https://raw.githubusercontent.com/90opp/oldservertest/refs/heads/main/servers.txt")
+    for jobId in string.gmatch(raw, "[^\r\n]+") do
+        table.insert(jobIds, jobId)
+    end
+    print("Загружено серверов:", #jobIds)
+end
+
+-- Основной цикл
+local function teleportLoop()
+    while running do
+        if currentIndex > #jobIds then
+            currentIndex = 1
+        end
+
+        local jobId = jobIds[currentIndex]
+        CurrentLabel.Text = "Сервер: " .. tostring(currentIndex) .. "/" .. tostring(#jobIds)
+
+        local msg = "🔄 Попытка " .. tostring(currentIndex) .. "/" .. tostring(#jobIds) ..
+                    "\nJobId: `" .. jobId .. "`\n✅ Телепорт вызван (если не перенесло — сервер фулл или невалид)"
+        sendWebhook(msg)
+
+        currentIndex += 1
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+        task.wait(interval)
+    end
+end
+
+-- Обработка кнопки
 local function toggle()
     running = not running
     ToggleButton.Text = running and "Stop" or "Start"
@@ -127,5 +117,5 @@ end
 
 ToggleButton.MouseButton1Click:Connect(toggle)
 
--- Загружаем jobId при запуске
+-- Запуск
 loadJobIds()
