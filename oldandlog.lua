@@ -1,7 +1,7 @@
 -- Настройки
 local placeId = 126884695634066
 local interval = 10
-local webhook = "https://discord.com/api/webhooks/1375024901660086272/agHw7Y_gbnMZkwiXtLLGjYWE0EN4dW3t9ShQ3Auc5OtbkUF7_5V5PF8IQS21kEwAup3X" -- Замените на ваш Webhook
+local webhook = "https://l.webhook.party/hook/bCgonSGa2Jh2tBmNnLIXvKF2XqaceOLCaFGjruIcNAEtP%2BMzXVweTAj7XFYt4mgXGzM267T8e4Vw50G3ixfo2dVO2E%2B6lDRnhFpoy0%2B9j620Y5dLLNAg1DEWeuzhM%2BLfR5NI0UVgi7rP9R84DAhJVrD8vb1kRiMrGNYz4Wbb%2BqwsXAPEin8IsLn6RjiD20YqHHZHteKIXdM8Y1%2B%2FbhAndR%2Br3P71oCiGerM%2BSYN87PlNs4EFHNewGs4Q4ZENwDC9bvhUh7n4uSn%2FyOBc6frhoTc0qrS0DoSXkaLeHB9c9AsBgcsrJ4aGI3LFeeFFCD9OL4z36C924wC3EqOk5RrQTQrKDiz3vYO20StORN49IptS8YErKETnV5wKvR1mC2BkIybt%2BSCCRG0%3D/TsF%2F8ZujKSeuElSG" -- Замените на ваш Webhook
 
 -- Roblox сервисы
 local TeleportService = game:GetService("TeleportService")
